@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cothon</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/theme.js"></script>
+<script src="/static/app.js" defer></script>
+</head>
+<body data-version="{{.S.Version}}">
+{{template "icons"}}
+<header class="top">
+  <div class="brand">
+    <img src="/static/icon.svg" alt="" width="22" height="22">
+    <span>cothon</span>
+  </div>
+  <div class="top-right">
+    <div class="conn" id="conn" title="Live updates" role="status"><span class="dot"></span><span class="conn-label">live</span></div>
+    <button type="button" id="theme" class="theme-btn" title="Theme" aria-label="Theme: follow system">
+      <svg class="i t-auto" aria-hidden="true"><use href="#i-auto"/></svg><svg class="i t-light" aria-hidden="true"><use href="#i-sun"/></svg><svg class="i t-dark" aria-hidden="true"><use href="#i-moon"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section id="status">{{template "status" .}}</section>
+
+  <section class="panel">
+    <div class="panel-head toolbar">
+      <div class="seg" id="f-view" role="group" aria-label="View">
+        <button type="button" data-v="grouped" aria-pressed="{{eq .View "grouped"}}"{{if eq .View "grouped"}} class="on"{{end}}>Grouped</button>
+        <button type="button" data-v="list" aria-pressed="{{eq .View "list"}}"{{if eq .View "list"}} class="on"{{end}}>List</button>
+      </div>
+      <div class="filters">
+        <div class="search"><input id="q" type="search" value="{{.F.Q}}" placeholder="Filter jobs, repos, branches…" autocomplete="off" aria-label="Filter jobs (shortcut: /)"><kbd aria-hidden="true">/</kbd></div>
+        <select id="f-repo" aria-label="Repository">
+          <option value="">All repos</option>
+          {{range .Repos}}<option value="{{.}}"{{if eq . $.F.Repo}} selected{{end}}>{{.}}</option>{{end}}
+          {{if .F.Repo}}{{if not (has .Repos .F.Repo)}}<option value="{{.F.Repo}}" selected>{{.F.Repo}}</option>{{end}}{{end}}
+        </select>
+        <div class="seg" id="f-status" role="group" aria-label="Status">
+          <button type="button" data-v="" aria-pressed="{{eq .F.Status ""}}"{{if eq .F.Status ""}} class="on"{{end}}>All</button>
+          <button type="button" data-v="running" aria-pressed="{{eq .F.Status "running"}}"{{if eq .F.Status "running"}} class="on"{{end}}>Running</button>
+          <button type="button" data-v="failed" aria-pressed="{{eq .F.Status "failed"}}"{{if eq .F.Status "failed"}} class="on"{{end}}>Failed</button>
+          <button type="button" data-v="passed" aria-pressed="{{eq .F.Status "passed"}}"{{if eq .F.Status "passed"}} class="on"{{end}}>Passed</button>
+          <button type="button" data-v="canceled" aria-pressed="{{eq .F.Status "canceled"}}"{{if eq .F.Status "canceled"}} class="on"{{end}}>Canceled</button>
+        </div>
+        <button type="button" id="f-clear" class="link">Clear</button>
+      </div>
+    </div>
+    <div id="jobs">{{template "jobs" .}}</div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
+
+{{define "main"}}<div data-part="status">{{template "status" .}}</div><div data-part="jobs">{{template "jobs" .}}</div>{{end}}
+
+{{define "status"}}
+{{range .S.Warnings}}<div class="warn" role="alert">⚠ {{.}}</div>{{end}}
+
+<div class="grid">
+  <div class="panel runner" data-key="runner">
+    <div class="panel-head">
+      <h2>Runner</h2>
+      <span class="pill st-{{.Status}}">{{.Status}}</span>
+    </div>
+    <div class="runner-name">{{if .S.Runner}}{{.S.Runner.Name}}{{else}}unknown runner{{end}}</div>
+    {{if .OrgURL}}<a class="muted" href="{{.OrgURL}}" target="_blank" rel="noopener">{{trimScheme .OrgURL}}</a>{{end}}
+    <div class="stats">
+      <div class="stat" title="the runner itself (listener + run.sh), without jobs">
+        <span class="stat-label">CPU</span>
+        <span class="stat-value" data-u="runner-cpu">{{with .U}}{{if .Runner.Procs}}{{cpu .Runner.CPU}}{{else}}—{{end}}{{else}}—{{end}}</span>
+        <span class="stat-sub">runner only</span>
+      </div>
+      <div class="stat" title="the runner itself (listener + run.sh), without jobs">
+        <span class="stat-label">Memory</span>
+        <span class="stat-value" data-u="runner-rss">{{with .U}}{{if .Runner.Procs}}{{bytes .Runner.RSS}}{{else}}—{{end}}{{else}}—{{end}}</span>
+        <span class="stat-sub">listener + run.sh</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">State</span>
+        <span class="stat-value v-{{.Status}}">{{stateLabel .Status}}</span>
+        <span class="stat-sub">{{range .Running}}running {{.Name}}{{else}}{{if not $.S.Listener.Since.IsZero}}{{if eq $.Status "idle"}}for <time data-for="{{iso $.S.Listener.Since}}">{{clock $.S.Listener.Since}}</time>{{else}}<time data-ago="{{iso $.S.Listener.Since}}">{{clock $.S.Listener.Since}}</time>{{end}}{{end}}{{end}}</span>
+      </div>
+    </div>
+    <p class="today">{{if .Today.Jobs}}<b>Today</b> {{.Today.Jobs}} job{{if ne .Today.Jobs 1}}s{{end}}{{if .Today.OK}} · <span class="c-ok">✓ {{.Today.OK}}</span>{{end}}{{if .Today.Failed}} · <span class="c-fail">✗ {{.Today.Failed}}</span>{{end}} · busy {{human .Today.Busy}}{{else}}<b>Today</b> no jobs yet{{end}}</p>
+    {{if gt .S.Processes.Listeners 1}}<p class="warn small">{{.S.Processes.Listeners}} listeners are running (session conflict)</p>{{end}}
+    {{if .S.Pending}}<p class="hl small pending">Will {{.S.Pending}} when the current job finishes.</p>{{end}}
+    <div class="actions">
+      {{if not .S.Processes.ListenerPID}}{{if not .S.Processes.SupervisorPID}}
+        <button class="act primary" data-kind="runner-start">{{icon "play"}}Start runner</button>
+      {{end}}{{else}}
+        {{if .S.Pending}}
+          <button class="act" data-kind="runner-abort-pending">{{icon "play"}}Keep running</button>
+        {{else}}
+          {{if .S.Processes.WorkerPID}}
+            <button class="act" data-kind="runner-stop" title="Stops when the current job finishes">{{icon "pause"}}Stop</button>
+            <button class="act" data-kind="runner-restart" title="Restarts when the current job finishes">{{icon "restart"}}Restart</button>
+            <button class="act danger" data-kind="runner-stop" data-force="1" data-confirm title="Stops now; the running job is canceled">{{icon "stop"}}Stop now</button>
+            <span class="info" tabindex="0" role="img" aria-label="Stop and Restart wait for the current job to finish" title="Stop and Restart wait for the current job to finish">{{icon "info"}}</span>
+          {{else}}
+            <button class="act" data-kind="runner-stop">{{icon "stop"}}Stop</button>
+            <button class="act" data-kind="runner-restart">{{icon "restart"}}Restart</button>
+          {{end}}
+        {{end}}
+      {{end}}
+    </div>
+  </div>
+
+  <div class="panel now" data-key="now">
+    <div class="panel-head"><h2>Now</h2></div>
+    {{range .Running}}
+      <div class="job-card">
+        <div class="job-title">{{status "running"}}<span class="ellipsis">{{.Name}}</span></div>
+        <div class="job-sub ellipsis"><b>{{.Repository}}</b>{{if .Workflow}} · {{.Workflow}} #{{.RunNumber}}{{end}}{{if attempt .RunAttempt}} <span class="tag">attempt {{.RunAttempt}}</span>{{end}}</div>
+        <div class="job-meta">
+          {{if .Ref}}<span title="branch">{{icon "branch"}}{{branch .Ref}}</span>{{end}}
+          {{if .SHA}}<span title="commit" class="mono">{{icon "commit"}}{{short .SHA}}</span>{{end}}
+          {{if .Actor}}<span title="trigger">{{icon "user"}}{{.Event}} by {{.Actor}}</span>{{end}}
+          <span title="elapsed" class="mono">{{icon "clock"}}<time data-elapsed="{{iso .Started}}">{{dur .}}</time></span>
+        </div>
+        <div class="stats four" id="u-job" data-job="{{.ID}}" title="the job's processes (containers run by Docker are not included)">
+          <div class="stat">
+            <span class="stat-label">CPU</span>
+            <span class="stat-value v-busy" data-u="cpu">{{with $.U}}{{with .Job}}{{cpu .Current.CPU}}{{end}}{{end}}</span>
+            <svg class="spark" data-u="spark" viewBox="0 0 120 22" preserveAspectRatio="none" aria-hidden="true"><polygon points=""/><polyline points=""/></svg>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Memory</span>
+            <span class="stat-value" data-u="rss">{{with $.U}}{{with .Job}}{{bytes .Current.RSS}}{{end}}{{end}}</span>
+            <span class="stat-sub">avg CPU <span data-u="avg">{{with $.U}}{{with .Job}}{{cpu .Summary.AvgCPU}}{{end}}{{end}}</span></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Peak memory</span>
+            <span class="stat-value" data-u="peak">{{with $.U}}{{with .Job}}{{bytes .Summary.PeakRSS}}{{end}}{{end}}</span>
+            <span class="stat-sub">peak CPU <span data-u="peakcpu">{{with $.U}}{{with .Job}}{{cpu .Summary.PeakCPU}}{{end}}{{end}}</span></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Processes</span>
+            <span class="stat-value" data-u="procs">{{with $.U}}{{with .Job}}{{.Current.Procs}}{{end}}{{end}}</span>
+            <span class="stat-sub">under the job</span>
+          </div>
+        </div>
+        <div class="actions">
+          {{if .HTMLURL}}<a class="btn" href="{{.HTMLURL}}" target="_blank" rel="noopener">{{icon "open"}}Open job</a>{{end}}
+          {{if and .RunURL (ne .RunURL .HTMLURL)}}<a class="btn" href="{{.RunURL}}" target="_blank" rel="noopener">{{icon "open"}}Open run</a>{{end}}
+          {{if and .Repository .RunID}}<button class="act danger" data-kind="cancel-run" data-repo="{{.Repository}}" data-run="{{.RunID}}" data-confirm>{{icon "stop"}}Cancel run</button>{{end}}
+        </div>
+      </div>
+    {{else}}
+      <p class="empty">{{if eq $.Status "stopped"}}The runner is stopped{{else}}No job running{{end}}</p>
+      {{range $.LastJob}}
+      <div class="last-job">
+        <div class="last-title"><span class="stat-label">Last job</span>
+          <span class="last-name">{{status (outcome .)}}<b>{{.Name}}</b> <span class="muted">{{repoName .Repository}} · {{.Workflow}} #{{.RunNumber}} · <time data-ago="{{iso .Finished}}">{{clock .Finished}}</time></span></span>
+          {{if .HTMLURL}}<a class="ext" href="{{.HTMLURL}}" target="_blank" rel="noopener" title="Open job on GitHub" aria-label="Open job on GitHub">{{icon "open"}}</a>{{end}}
+        </div>
+        <div class="stats four">
+          <div class="stat"><span class="stat-label">Result</span><span class="stat-value v-{{outcome .}}">{{outcomeLabel .}}</span></div>
+          <div class="stat"><span class="stat-label">Duration</span><span class="stat-value">{{dur .}}</span></div>
+          <div class="stat"><span class="stat-label">Avg CPU</span><span class="stat-value">{{with .Usage}}{{cpu .AvgCPU}}{{else}}<span class="nm" title="not measured: finished before cothon measured jobs">—</span>{{end}}</span></div>
+          <div class="stat"><span class="stat-label">Peak memory</span><span class="stat-value">{{with .Usage}}{{bytes .PeakRSS}}{{else}}<span class="nm" title="not measured: finished before cothon measured jobs">—</span>{{end}}</span></div>
+        </div>
+      </div>
+      {{end}}
+    {{end}}
+    {{with .S.Queue}}
+    <div class="queue">
+      <h3>Queued for this runner{{if .Jobs}} <span class="tag">{{len .Jobs}}</span>{{end}}</h3>
+      {{if .Jobs}}
+      <ul class="queue-list">
+        {{range $i, $q := .Jobs}}{{if lt $i 5}}
+        <li>
+          {{status "queued"}}
+          <span class="q-name ellipsis"><span class="name">{{.Name}}</span></span>
+          <span class="q-meta muted ellipsis">{{repoName .Repo}} · {{.Workflow}} #{{.RunNumber}}{{if .Branch}} · {{icon "branch"}}{{branch .Branch}}{{end}}</span>
+          <span class="q-wait muted mono" title="waiting since {{clock .Queued}}">{{icon "clock"}}<time data-elapsed="{{iso .Queued}}">{{since .Queued}}</time></span>
+          {{if .HTMLURL}}<a class="ext" href="{{.HTMLURL}}" target="_blank" rel="noopener" title="Open job on GitHub" aria-label="Open job on GitHub">{{icon "open"}}</a>{{else}}<span></span>{{end}}
+        </li>
+        {{end}}{{end}}
+      </ul>
+      {{if gt (len .Jobs) 5}}<p class="muted small">and {{sub (len .Jobs) 5}} more</p>{{end}}
+      {{else}}
+      <p class="empty small">Nothing queued.</p>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+
+{{with .S.Org}}
+<div class="panel org">
+  <div class="panel-head">
+    <h2>Org · {{.Name}}</h2>
+    <span class="muted small">{{if not .Updated.IsZero}}updated <time data-ago="{{iso .Updated}}">{{clock .Updated}}</time>{{if ge .RateRemaining 0}} · API {{.RateRemaining}} left{{end}}{{end}}</span>
+  </div>
+  {{if .Runs}}
+  <ul class="org-runs">
+    {{range .Runs}}
+    <li class="org-run">
+      <div class="org-run-head">
+        <span class="pill st-{{.Status}}">{{.Status}}</span>
+        {{if .HTMLURL}}<a href="{{.HTMLURL}}" target="_blank" rel="noopener"><b>{{repoName .Repo}}</b> · {{.Workflow}} #{{.RunNumber}}</a>{{else}}<span><b>{{repoName .Repo}}</b> · {{.Workflow}} #{{.RunNumber}}</span>{{end}}
+        <span class="muted small">{{icon "branch"}}{{branch .Branch}} · {{.Event}} by {{.Actor}} · <time data-ago="{{iso .Created}}">{{clock .Created}}</time></span>
+        <span class="spacer"></span>
+        {{if and .Repo .RunID}}<button class="act small danger" data-kind="cancel-run" data-repo="{{.Repo}}" data-run="{{.RunID}}" data-confirm>{{icon "stop"}}Cancel</button>{{end}}
+      </div>
+      <div class="chips">
+        {{range .Jobs}}{{if .HTMLURL}}<a class="chip st-{{jobStatus .}}{{if .OnThisRunner}} mine{{end}}" href="{{.HTMLURL}}" target="_blank" rel="noopener" title="{{jobStatus .}}{{if .RunnerName}} on {{.RunnerName}}{{end}}{{if .OnThisRunner}} · this runner{{end}}">{{.Name}}{{if .OnThisRunner}} ★{{end}}</a>{{else}}<span class="chip st-{{jobStatus .}}{{if .OnThisRunner}} mine{{end}}">{{.Name}}{{if .OnThisRunner}} ★{{end}}</span>{{end}}{{end}}
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else if not .Warning}}
+  <p class="empty">Nothing queued or in progress across recently active repos.</p>
+  {{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "jobs"}}
+{{if .Recent}}
+<div class="table-wrap">
+{{if eq .View "list"}}
+<table class="jobs list">
+  <thead><tr><th>Job</th><th>Repo · workflow</th><th class="c-branch">Branch</th><th class="c-time">Started</th><th class="c-cpu num" title="average CPU of the job's processes (100% = one core)">Avg CPU</th><th class="c-mem num" title="peak memory of the job's processes">Peak mem</th><th class="num">Duration</th><th class="c-act"><span class="sr">Actions</span></th></tr></thead>
+  <tbody>
+  {{range .Recent}}{{template "jobrow" .}}{{end}}
+  </tbody>
+</table>
+{{else}}
+<table class="jobs grouped">
+  <thead><tr><th>Repo · run · job</th><th class="c-branch">Branch</th><th class="c-time">Started</th><th class="c-cpu num" title="average CPU of the job's processes (100% = one core)">Avg CPU</th><th class="c-mem num" title="peak memory of the job's processes">Peak mem</th><th class="num">Duration</th><th class="c-act"><span class="sr">Actions</span></th></tr></thead>
+  {{range .Groups}}
+  <tbody class="repo-group">
+    <tr class="repo-row toggle" data-key="{{.Repo}}" tabindex="0" aria-expanded="true">
+      <td class="title"><span class="caret">{{icon "chevron"}}</span><b class="repo-title">{{.Repo}}</b></td>
+      <td class="branch"></td>
+      <td class="time muted"><time data-ago="{{iso .Latest}}">{{clock .Latest}}</time></td>
+      <td class="cpu"></td>
+      <td class="mem"></td>
+      <td class="num counts" colspan="2">{{template "counts" .}}</td>
+    </tr>
+    {{range .Runs}}
+    <tr class="run-row toggle" data-repo="{{.Repo}}" data-key="{{.Key}}" data-jobs="{{len .Jobs}}" tabindex="0" aria-expanded="false">
+      <td class="title run-title"><span class="caret">{{icon "chevron"}}</span>{{status .Outcome}}<span class="name">{{if .Workflow}}{{.Workflow}} #{{.RunNumber}}{{else}}unknown run{{end}}</span>{{if attempt .Attempt}}<span class="tag">attempt {{.Attempt}}</span>{{end}}{{if .Actor}}<span class="meta muted small">{{icon "user"}}{{.Actor}}</span>{{end}}{{if .Event}}<span class="meta muted small">{{.Event}}</span>{{end}}<span class="counts small">{{template "counts" .}}</span><span class="match-hint tag" hidden></span></td>
+      <td class="muted branch" title="{{branch .Ref}}">{{if .Ref}}{{icon "branch"}}{{branch .Ref}}{{end}}</td>
+      <td class="time muted"><time data-ago="{{iso .Started}}" title="{{clock .Started}}">{{clock .Started}}</time></td>
+      <td class="cpu"></td>
+      <td class="mem num mono muted">{{bytes (runPeak .Jobs)}}</td>
+      <td class="num mono">{{if .Running}}<time data-elapsed="{{iso .Started}}">{{span .}}</time>{{else}}{{span .}}{{end}}</td>
+      <td class="row-actions">
+        {{if and .Repo .RunID}}
+        {{if .Running}}<button class="act icon danger" data-kind="cancel-run" data-repo="{{.Repo}}" data-run="{{.RunID}}" data-confirm title="Cancel run" aria-label="Cancel run">{{icon "stop"}}</button>{{end}}
+        {{if or .Failed .Canceled}}{{if not .Running}}<button class="act icon" data-kind="rerun-failed" data-repo="{{.Repo}}" data-run="{{.RunID}}" data-confirm title="Rerun failed jobs" aria-label="Rerun failed jobs">{{icon "rerun-failed"}}</button>{{end}}{{end}}
+        {{end}}
+        {{if .RunURL}}<a class="ext" href="{{.RunURL}}" target="_blank" rel="noopener" data-kind="run-link" title="Open run on GitHub" aria-label="Open run on GitHub">{{icon "open"}}</a>{{end}}
+      </td>
+    </tr>
+    {{range .Jobs}}
+    <tr class="job-row" data-key="job:{{.ID}}" data-repo="{{.Repository}}" data-run="{{runKey .}}" data-outcome="{{outcome .}}" data-search="{{search .}}">
+      <td class="title job">{{status (outcome .)}}<span class="name">{{.Name}}</span></td>
+      <td class="branch"></td>
+      <td class="time muted"><time data-ago="{{iso .Started}}" title="{{clock .Started}}">{{clock .Started}}</time></td>
+      {{template "memcell" .}}
+      <td class="num mono">{{if eq (outcome .) "running"}}<time data-elapsed="{{iso .Started}}">{{dur .}}</time>{{else}}{{dur .}}{{end}}</td>
+      <td class="row-actions">
+        {{if and (ne (outcome .) "running") .Repository .CheckRunID}}<button class="act icon" data-kind="rerun-job" data-repo="{{.Repository}}" data-job="{{.CheckRunID}}" data-confirm title="Rerun job" aria-label="Rerun job">{{icon "rerun"}}</button>{{end}}
+        {{template "extjob" .}}
+      </td>
+    </tr>
+    {{end}}
+    {{end}}
+    <tr class="more-row" data-repo="{{.Repo}}" hidden><td colspan="7"><button type="button" class="link more-runs" data-repo="{{.Repo}}"></button></td></tr>
+  </tbody>
+  {{end}}
+</table>
+{{end}}
+</div>
+<div class="more-list" hidden><button type="button" id="more-list"></button></div>
+<div class="empty no-match" id="no-match" hidden>No jobs match these filters. <button type="button" class="link" data-clear>Clear filters</button></div>
+{{else}}
+<p class="empty">No jobs in the runner logs yet.</p>
+{{end}}
+{{end}}
+
+{{define "counts"}}{{if .Running}}<span class="c-run" title="running"><span aria-hidden="true">● </span>{{.Running}}<span class="sr"> running</span></span>{{end}}{{if .OK}}<span class="c-ok" title="passed"><span aria-hidden="true">✓ </span>{{.OK}}<span class="sr"> passed</span></span>{{end}}{{if .Failed}}<span class="c-fail" title="failed"><span aria-hidden="true">✗ </span>{{.Failed}}<span class="sr"> failed</span></span>{{end}}{{if .Canceled}}<span class="c-cancel" title="canceled"><span aria-hidden="true">⊘ </span>{{.Canceled}}<span class="sr"> canceled</span></span>{{end}}{{end}}
+
+{{define "jobrow"}}
+  <tr class="job-row" data-key="job:{{.ID}}" data-repo="{{.Repository}}" data-outcome="{{outcome .}}" data-search="{{search .}}">
+    <td class="title job">{{status (outcome .)}}<span class="name">{{.Name}}</span>{{if attempt .RunAttempt}}<span class="tag">#{{.RunAttempt}}</span>{{end}}<span class="sub muted">{{repoName .Repository}} · {{.Workflow}} #{{.RunNumber}}</span></td>
+    <td class="title"><span class="repo">{{repoName .Repository}}</span><span class="muted"> · {{.Workflow}} #{{.RunNumber}}</span></td>
+    <td class="muted branch" title="{{branch .Ref}}">{{if .Ref}}{{icon "branch"}}{{branch .Ref}}{{end}}</td>
+    <td class="time muted"><time data-ago="{{iso .Started}}" title="{{clock .Started}}">{{clock .Started}}</time></td>
+    {{template "memcell" .}}
+    <td class="num mono">{{if eq (outcome .) "running"}}<time data-elapsed="{{iso .Started}}">{{dur .}}</time>{{else}}{{dur .}}{{end}}</td>
+    <td class="row-actions">
+      {{if and (ne (outcome .) "running") .Repository}}
+      {{if .CheckRunID}}<button class="act icon" data-kind="rerun-job" data-repo="{{.Repository}}" data-job="{{.CheckRunID}}" data-confirm title="Rerun job" aria-label="Rerun job">{{icon "rerun"}}</button>{{end}}
+      {{if and (failed .) .RunID}}<button class="act icon" data-kind="rerun-failed" data-repo="{{.Repository}}" data-run="{{.RunID}}" data-confirm title="Rerun failed jobs" aria-label="Rerun failed jobs">{{icon "rerun-failed"}}</button>{{end}}
+      {{end}}
+      {{template "extjob" .}}
+    </td>
+  </tr>
+{{end}}
+
+{{define "memcell"}}{{if eq (outcome .) "running"}}<td class="cpu num mono" data-cpu-job="{{.ID}}"></td><td class="mem num mono" data-mem-job="{{.ID}}"></td>{{else}}{{with .Usage}}<td class="cpu num mono muted" title="peak CPU {{cpu .PeakCPU}} · {{printf "%.0f" .CPUSeconds}} CPU-seconds">{{cpu .AvgCPU}}</td><td class="mem num mono muted">{{bytes .PeakRSS}}</td>{{else}}<td class="cpu num"><span class="nm" title="not measured: the job finished before cothon measured jobs">—</span></td><td class="mem num"><span class="nm" title="not measured: the job finished before cothon measured jobs">—</span></td>{{end}}{{end}}{{end}}
+
+{{define "extjob"}}{{if .HTMLURL}}<a class="ext" href="{{.HTMLURL}}" target="_blank" rel="noopener" data-kind="job-link" title="Open job on GitHub" aria-label="Open job on GitHub">{{icon "open"}}</a>{{end}}{{end}}

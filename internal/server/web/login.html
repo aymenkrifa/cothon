@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cothon · sign in</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/theme.js"></script>
+</head>
+<body>
+<main class="login">
+  <div class="panel login-card">
+    <div class="brand"><img src="/static/icon.svg" alt="" width="22" height="22"><span>cothon</span></div>
+    {{if .Msg}}<p class="warn">{{.Msg}}</p>{{end}}
+    <p>This dashboard can rerun and cancel CI and control your runner, so it only opens through a link that cothon creates for you.</p>
+    <p>To open it in this browser, run in a terminal and paste the link it prints here:</p>
+    <pre class="mono">cothon link</pre>
+    <p class="muted small">Or <code>cothon web</code> (default browser), <code>cothon web --browser firefox</code>. Each browser signs in once, for 30 days; bookmarked filter links keep working afterwards.</p>
+  </div>
+</main>
+</body>
+</html>
