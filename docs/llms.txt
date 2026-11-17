@@ -1,0 +1,42 @@
+# cothon
+
+> A dashboard for a self-hosted GitHub Actions runner: every job it runs, across repos, in a web UI and a TUI — with the queue, CPU and memory per job, rerun/cancel, and runner control.
+
+It reads the runner's own diagnostic logs (`~/actions-runner/_diag`), so it needs no GitHub admin rights and shows a job the moment it starts. Named after the cothon, Carthage's circular war harbour watched from the admiral's tower at its centre.
+
+## Features
+
+- Every job the runner executes, grouped by repo and workflow run, or as a flat list; filters live in the URL
+- The running job with live CPU, memory and process count; finished jobs keep average CPU and peak memory
+- Jobs queued for this runner (asked from GitHub for the repos it worked on recently)
+- Rerun a job, rerun failed jobs, cancel a run (through the GitHub CLI)
+- Runner control: start detached, stop or restart after the current job, follow its logs, optional systemd user service (start at login, restart on crash)
+- Desktop notifications when jobs finish
+- Loopback-only server with one-time sign-in links; light and dark themes
+
+## Install
+
+Linux only. Needs Go 1.24+; the GitHub CLI (logged in) for rerun, cancel and the queue.
+
+```
+go install github.com/aymenkrifa/cothon/cmd/cothon@latest
+```
+
+## Usage
+
+```
+cothon web                  # open the web UI (server runs in the background)
+cothon tui                  # the terminal UI
+cothon status               # server and runner status, CPU and memory
+cothon runner start         # start the runner detached
+cothon runner stop          # stop after the current job (--force: now)
+cothon runner logs -f       # follow what the runner prints
+cothon runner enable        # start at login, restart on crash
+cothon update               # install the latest version (go install)
+```
+
+## Links
+
+- Docs: https://cothon.aymenkrifa.com
+- GitHub: https://github.com/aymenkrifa/cothon
+- Author: https://aymenkrifa.com

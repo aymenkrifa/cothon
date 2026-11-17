@@ -962,12 +962,15 @@ func (m *model) groupedList() string {
 		var icon, left, right string
 		switch e.kind {
 		case eRepo:
-			icon = statusIcon(e.repo.Outcome)
+			icon = " " // a repo has no single status: its counts say it all
 			left = caret + sTitle.Render(e.repo.Repo) + "  " + counts(e.repo.OK, e.repo.Failed, e.repo.Canceled, e.repo.Running)
 			right = ago(now.Sub(e.repo.Latest))
 		case eRun:
 			r := e.run
 			icon = statusIcon(r.Outcome)
+			if e.open {
+				icon = " " // an expanded run hands its status to its jobs: one spinner per job
+			}
 			label := r.Workflow + " #" + r.RunNumber
 			if r.Attempt != "" && r.Attempt != "1" {
 				label += " (attempt " + r.Attempt + ")"

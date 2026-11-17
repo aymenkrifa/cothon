@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -47,6 +48,8 @@ commands:
   scan      print recent jobs and exit
   runner    status | start | stop | restart [--force] | logs [-f] | enable [--at-boot] | disable
   config    path | show | init
+  update    install the latest cothon from GitHub (needs Go)
+  version   print the installed version
 
 Run "cothon <command> -h" for flags.
 `
@@ -78,6 +81,10 @@ func main() {
 		err = cmdScan(args)
 	case "runner":
 		err = cmdRunner(args)
+	case "update":
+		err = cmdUpdate(args)
+	case "version", "--version", "-v":
+		fmt.Println("cothon " + version())
 	case "config":
 		err = cmdConfig(args)
 	case "-h", "--help", "help":
@@ -987,4 +994,83 @@ func migrateLegacyDirs() {
 			os.Rename(old, cur)
 		}
 	}
+}
+
+const modulePath = "github.com/aymenkrifa/cothon/cmd/cothon"
+
+// version reports the module version go install recorded (v1.2.3, or a
+// pseudo-version for an untagged commit), else the VCS revision of a local build.
+func version() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	if v := bi.Main.Version; v != "" && v != "(devel)" {
+		return v
+	}
+	rev, dirty := "", false
+	for _, st := range bi.Settings {
+		switch st.Key {
+		case "vcs.revision":
+			rev = st.Value
+		case "vcs.modified":
+			dirty = st.Value == "true"
+		}
+	}
+	if len(rev) > 7 {
+		rev = rev[:7]
+	}
+	if rev == "" {
+		return "dev"
+	}
+	if dirty {
+		rev += "-dirty"
+	}
+	return "dev (" + rev + ")"
+}
+
+// cmdUpdate reinstalls cothon from GitHub with go install, into the folder
+// the running binary lives in, so the update replaces this exact install.
+func cmdUpdate(args []string) error {
+	fs := flag.NewFlagSet("update", flag.ExitOnError)
+	ref := fs.String("version", "latest", "version to install: latest, a tag like v0.2.0, or a commit")
+	fs.Parse(args)
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		return errors.New("cothon updates with Go's installer, but `go` is not on your PATH (https://go.dev/dl/)")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	before := version()
+	fmt.Printf("updating cothon %s in %s …\n", before, filepath.Dir(exe))
+	cmd := exec.Command(goBin, "install", modulePath+"@"+*ref)
+	cmd.Env = append(os.Environ(), "GOBIN="+filepath.Dir(exe))
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go install failed: %w", err)
+	}
+	// Ask the toolchain which module version it built (works for any cothon,
+	// even one older than the "version" command).
+	after := "the latest version"
+	if out, err := exec.Command(goBin, "version", "-m", filepath.Join(filepath.Dir(exe), "cothon")).Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			if f := strings.Fields(line); len(f) >= 3 && f[0] == "mod" {
+				after = f[2]
+			}
+		}
+	}
+	if after == before {
+		fmt.Printf("already up to date (%s)\n", after)
+	} else {
+		fmt.Printf("updated: %s → %s\n", before, after)
+	}
+	if _, err := client.ReadRuntime(); err == nil {
+		fmt.Println("a cothon server is running the old version: \"cothon stop\", then \"cothon web\" (or \"cothon start\") to restart it")
+	}
+	return nil
 }

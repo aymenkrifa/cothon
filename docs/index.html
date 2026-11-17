@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cothon — a dashboard for your self-hosted github actions runner</title>
+<meta name="description" content="watch every job your self-hosted github actions runner executes, across repos: a web ui, a tui, the queue, cpu and memory, and runner control. built in go, mit-licensed.">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" type="image/svg+xml" href="assets/cothon-icon.svg">
+<link rel="apple-touch-icon" href="assets/cothon-icon-180.png">
+<link rel="manifest" href="site.webmanifest">
+<meta name="theme-color" content="#0B0E16">
+<meta property="og:title" content="cothon">
+<meta property="og:description" content="a dashboard for your self-hosted github actions runner">
+<meta property="og:image" content="https://cothon.aymenkrifa.com/assets/cothon-social-preview.png">
+<meta property="og:url" content="https://cothon.aymenkrifa.com/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* night harbour: dark is the default. the accent is tyrian purple, the dye
+     carthage and phoenicia were famous for, lifted to read on the dark sea. */
+  :root{
+    --bg:#0B0E16; --panel:#0F1320; --ink:#E9E4F2;
+    --purple:#D46FB8; --green:#4ADE80; --red:#FF6B6B; --amber:#F2B94B; --ash:#8A8FA3;
+    --line:rgba(138,143,163,.36); --glow:rgba(212,111,184,.15);
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+  }
+  :root[data-theme=light]{
+    --bg:#F3F0F7; --panel:#FFFFFF; --ink:#16131D;
+    --purple:#8E1F6B; --green:#15803D; --red:#C62F2F; --amber:#9A6700; --ash:#5E6070;
+    --line:rgba(94,96,112,.32); --glow:rgba(142,31,107,.08);
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme=dark]){
+      --bg:#F3F0F7; --panel:#FFFFFF; --ink:#16131D;
+      --purple:#8E1F6B; --green:#15803D; --red:#C62F2F; --amber:#9A6700; --ash:#5E6070;
+      --line:rgba(94,96,112,.32); --glow:rgba(142,31,107,.08);
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--mono);
+       background-image:radial-gradient(ellipse 1000px 520px at 50% -70px,var(--glow) 0%,transparent 72%);
+       background-repeat:no-repeat;font-size:16px;line-height:1.7;padding:24px 20px 28px;
+       -webkit-font-smoothing:antialiased}
+  .page{max-width:860px;margin:0 auto}
+  a{color:var(--purple)}
+
+  .masthead{display:flex;justify-content:space-between;align-items:center;gap:16px;
+       font-size:12.5px;letter-spacing:.04em;color:var(--ash);border-bottom:1px solid var(--line);padding-bottom:9px}
+  .masthead a{color:var(--ash);text-decoration:none}
+  .masthead a:hover{color:var(--purple)}
+  .sky-toggle{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:var(--ash);background:none;
+       border:none;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:7px;line-height:1}
+  .sky-toggle:hover{color:var(--purple)}
+
+  .hero{text-align:center;padding:40px 0 22px}
+  .hero img{height:72px;width:auto;max-width:86%}
+  .hero p{color:var(--ash);font-size:14.5px;margin-top:14px}
+  .hero .story{font-family:var(--sans);font-size:13.5px;max-width:560px;margin:8px auto 0;opacity:.85;line-height:1.55}
+  .logo-light,.shot-light{display:none}
+  :root[data-theme=light] .logo-light,:root[data-theme=light] .shot-light{display:inline}
+  :root[data-theme=light] .logo-dark,:root[data-theme=light] .shot-dark{display:none}
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme=dark]) .logo-light,:root:not([data-theme=dark]) .shot-light{display:inline}
+    :root:not([data-theme=dark]) .logo-dark,:root:not([data-theme=dark]) .shot-dark{display:none}
+  }
+
+  .why{display:flex;flex-direction:column;gap:6px;width:fit-content;max-width:100%;margin:6px auto 0;
+       font-size:13.5px;line-height:1.45;color:var(--ash)}
+  .why span{position:relative;padding-left:1.15em}
+  .why span::before{content:'·';position:absolute;left:0;color:var(--purple);font-weight:700}
+  .why b{color:var(--ink);font-weight:500}
+
+  /* panel grammar: a thin border with the title notched into the top edge */
+  .panel{position:relative;border:1px solid var(--line);background:var(--panel);margin-top:44px;padding:26px 24px 22px}
+  .panel > .title{position:absolute;top:0;left:18px;transform:translateY(-50%);background:var(--bg);padding:0 10px;
+       font-size:12.5px;letter-spacing:.06em;color:var(--ash)}
+  .panel > .title b{color:var(--purple);font-weight:700}
+  .note{font-family:var(--sans);font-size:14px;color:var(--ash);margin-top:14px;line-height:1.6;opacity:.9}
+  .note code,.cmds code{font-family:var(--mono);font-size:.9em;color:var(--ink)}
+
+  .cmd-wrap{display:flex;align-items:center;gap:12px}
+  .cmd{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-size:14px;background:var(--bg);
+       border:1px solid var(--line);border-radius:2px;padding:10px 14px}
+  .prompt{color:var(--ash)}
+  .copy{font-family:var(--mono);font-size:12.5px;color:var(--ash);background:none;border:none;cursor:pointer}
+  .copy:hover{color:var(--purple)}
+
+  .shot{display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;line-height:0}
+  .shot img{width:100%;height:auto}
+
+  .tui{font-size:12.5px;line-height:1.55;overflow-x:auto;white-space:pre;background:var(--bg);
+       border:1px solid var(--line);border-radius:2px;padding:12px 14px}
+  .tui .hdr{color:var(--ink)} .tui .tabs{color:var(--purple)}
+  .tui .cardbox{display:block;color:var(--amber);border:1px solid var(--amber);border-radius:6px;padding:4px 10px;margin:6px 0 8px}
+  .tui .dim{color:var(--ash)} .tui .repo{font-weight:700}
+  .tui .gr{color:var(--green)} .tui .rd{color:var(--red)} .tui .am{color:var(--amber)} .tui .pu{color:var(--purple)}
+
+
+  .cmds{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;font-size:13.5px}
+  .cmds span{font-family:var(--sans);color:var(--ash)}
+
+  footer{margin-top:40px;text-align:center;font-size:12.5px;color:var(--ash);letter-spacing:.02em}
+  footer a{color:var(--ash)}
+  footer a:hover{color:var(--purple)}
+  @media (max-width:600px){ .cmds{grid-template-columns:1fr} .cmds span{margin-bottom:8px} }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="masthead">
+    <span><a href="https://github.com/aymenkrifa/cothon" target="_blank" rel="noopener noreferrer">github</a> · mit</span>
+    <button class="sky-toggle" id="sky-toggle" aria-label="toggle color scheme"></button>
+  </div>
+
+  <div class="hero">
+    <img class="logo-dark" src="assets/cothon-logo-dark.svg" alt="cothon" width="443" height="102">
+    <img class="logo-light" src="assets/cothon-logo-light.svg" alt="cothon" width="443" height="102">
+    <p>a dashboard for your self-hosted github actions runner</p>
+    <p class="story">carthage kept its fleet in the cothon, a ring harbour watched from the admiral's tower at its centre. this is that tower for your runner.</p>
+  </div>
+
+  <div class="why">
+    <span>reads the runner's own logs — <b>no admin rights</b>, works offline</span>
+    <span>every repo's jobs in <b>one live view</b>, plus what's <b>queued</b></span>
+    <span>cpu &amp; memory per job, <b>rerun &amp; cancel</b>, runner start/stop</span>
+  </div>
+
+  <div class="panel">
+    <div class="title"><b>01</b> · install</div>
+    <div class="cmd-wrap">
+      <div class="cmd"><span class="prompt">~$</span> <span id="install-cmd">go install github.com/aymenkrifa/cothon/cmd/cothon@latest</span></div>
+      <button class="copy" id="copy-btn" aria-label="copy install command">[copy]</button>
+    </div>
+    <p class="note">linux, go 1.24+. the <a href="https://cli.github.com" target="_blank" rel="noopener noreferrer">github cli</a> (logged in) is needed for rerun, cancel and the queue — watching works without it. update any time with <code>cothon update</code>.</p>
+  </div>
+
+  <div class="panel">
+    <div class="title"><b>02</b> · the web ui</div>
+    <a class="shot" href="assets/cothon-web-dark.png" target="_blank" rel="noopener">
+      <img class="shot-dark" src="assets/cothon-web-dark.png" alt="cothon web ui: the runner, the running job with live cpu and memory, the queue, and jobs grouped by repo and run" width="1180" height="800" loading="lazy">
+      <img class="shot-light" src="assets/cothon-web-light.png" alt="cothon web ui in light mode" width="1180" height="800" loading="lazy">
+    </a>
+    <p class="note"><code>cothon web</code> opens it in your browser and gives your prompt back; the server stops on its own a minute after you close the tab. filters live in the url, so views can be bookmarked.</p>
+  </div>
+
+  <div class="panel">
+    <div class="title"><b>03</b> · the tui</div>
+<div class="tui" role="img" aria-label="cothon tui: the running job card and jobs grouped by repo and run"><span class="hdr">cothon · aymen-laptop  <span class="am">●</span> busy  pid 4120  <span class="pu">2 queued</span>                          server 127.0.0.1:7777</span>
+<span class="cardbox"><span class="am">▶</span> test  4m00s   <span class="am">CPU 245%</span> · 1.3G · peak 1.7G · 37 procs
+aymenkrifa/cothon · CI #66
+⎇ main  e9b5cd0  push by aymenkrifa</span><span class="tabs"> Jobs · grouped (6)   Queue (2) </span>
+<span class="dim">  REPO · RUN · JOB    ←/→ fold · v list view</span>
+<b class="repo">  <span class="dim">▾</span> aymenkrifa/cothon  <span class="am">●</span> 1 <span class="gr">✓ 2</span>                                                            6m ago</b>
+<span class="am">●</span>    <span class="dim">▸</span> CI #66  ⎇ main  <span class="am">●</span> 1 <span class="gr">✓ 1</span>                                                     6m ago  6m00s
+<span class="gr">✓ </span>   <span class="dim">▸</span> CI #65  ⎇ main  <span class="gr">✓ 1</span>                                                          54m ago  39s
+<b class="repo">  <span class="dim">▾</span> aymenkrifa/reaper  <span class="gr">✓ 2</span> <span class="rd">✗ 1</span>                                                           33m ago</b>
+     <span class="dim">▾</span> CI #425  ⎇ main  <span class="gr">✓ 1</span> <span class="rd">✗ 1</span>                                                   33m ago  4m43s
+<span class="rd">✗ </span>        build (aarch64)                                                                  2m10s
+<span class="gr">✓ </span>        build (x86_64)                                                                   1m43s
+<span class="gr">✓ </span>   <span class="dim">▸</span> Release #18  ⎇ main  <span class="gr">✓ 1</span>                                                    1h ago  1m34s
+<span class="dim">↑↓ move  ←→ fold  enter open/fold  v view  r rerun  f rerun failed  c cancel run  / filter  F s…</span></div>
+    <p class="note"><code>cothon tui</code> — the same views in your terminal. <code>←/→</code> fold, <code>v</code> switches to a flat list, <code>tab</code> shows the queue.</p>
+  </div>
+
+  <div class="panel">
+    <div class="title"><b>04</b> · the runner</div>
+    <div class="cmds">
+      <code>cothon runner status</code><span>running? busy? cpu and memory</span>
+      <code>cothon runner start</code><span>runs run.sh detached — closing the terminal doesn't stop it</span>
+      <code>cothon runner stop</code><span>waits for the current job (<code>--force</code> cancels it)</span>
+      <code>cothon runner logs -f</code><span>what the runner prints, however it was started</span>
+      <code>cothon runner enable</code><span>start at login and restart on crash (systemd user service)</span>
+    </div>
+  </div>
+
+  <footer>made by <a href="https://aymenkrifa.com" target="_blank" rel="noopener noreferrer">aymen krifa</a>, named after carthage's harbour and built with go.</footer>
+</div>
+<script>
+(function(){
+  var btn = document.getElementById('sky-toggle');
+  var mq = matchMedia('(prefers-color-scheme: dark)');
+  try { var saved = localStorage.getItem('cothon-theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (e) {}
+  function effective(){ return document.documentElement.dataset.theme || (mq.matches ? 'dark' : 'light'); }
+  var SUN = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 1.8v2.4M12 19.8v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M1.8 12h2.4M19.8 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>';
+  var MOON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 13.1A8.6 8.6 0 1 1 10.9 3.2a6.7 6.7 0 0 0 9.9 9.9z"/></svg>';
+  function label(){
+    var dark = effective() === 'dark';
+    btn.innerHTML = (dark ? SUN : MOON) + '<span>' + (dark ? 'light' : 'dark') + '</span>';
+    btn.setAttribute('aria-label', dark ? 'switch to light' : 'switch to dark');
+  }
+  btn.addEventListener('click', function(){
+    var next = effective() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('cothon-theme', next); } catch (e) {}
+    label();
+  });
+  mq.addEventListener('change', label);
+  label();
+
+  var copy = document.getElementById('copy-btn');
+  copy.addEventListener('click', function(){
+    navigator.clipboard.writeText(document.getElementById('install-cmd').textContent).then(function(){
+      copy.textContent = '[copied]'; setTimeout(function(){ copy.textContent = '[copy]'; }, 1500);
+    });
+  });
+})();
+</script>
+</body>
+</html>

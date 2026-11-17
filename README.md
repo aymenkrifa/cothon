@@ -33,7 +33,9 @@ or from a clone:
 go build -o ~/.local/bin/cothon ./cmd/cothon
 ```
 
-Then `cothon web` (or `cothon tui`).
+Then `cothon web` (or `cothon tui`). Update later with `cothon update`.
+
+Docs: **https://cothon.aymenkrifa.com**
 
 ## Use
 
@@ -45,6 +47,7 @@ Then `cothon web` (or `cothon tui`).
 | `cothon tui` | Terminal UI. Uses the server if one runs, otherwise reads the logs itself. |
 | `cothon serve` | The server in the foreground (for systemd or debugging). |
 | `cothon scan` | Prints recent jobs (`--json` for scripts). |
+| `cothon update` / `version` | Installs the latest version (with `go install`, into the same folder) / prints the installed one. |
 | `cothon config init` | Writes a commented config to `~/.config/cothon/config.toml`. |
 
 ### The runner itself
