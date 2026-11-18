@@ -119,6 +119,10 @@ func waitOrPoke(ctx context.Context, wait time.Duration, poke <-chan struct{}, p
 	}
 }
 
+// queueWarnAfter is how many polls in a row a repo must fail before the queue
+// shows a warning; single timeouts are common and harmless.
+const queueWarnAfter = 3
+
 func (e *Engine) pollQueue(ctx context.Context) error {
 	repos := e.queueRepos()
 	runnerName := ""
@@ -137,10 +141,20 @@ func (e *Engine) pollQueue(ctx context.Context) error {
 		return e.queueAPI.Get(ctx, path, v)
 	}
 
+	var prev []QueuedJob
+	e.mu.Lock()
+	if e.queue != nil {
+		prev = e.queue.Jobs
+	}
+	e.mu.Unlock()
+	fails := map[string]int{}
+
 	var jobs []QueuedJob
 	var firstErr error
 	seenRun := map[string]bool{}
 	for _, repo := range repos {
+		var repoJobs []QueuedJob
+		var repoErr error
 		// A matrix whose first leg runs here is "in_progress" while the other
 		// legs still queue, so both kinds of runs are inspected.
 		for _, status := range []string{"queued", "in_progress"} {
@@ -151,8 +165,8 @@ func (e *Engine) pollQueue(ctx context.Context) error {
 				if limited, _ := e.queueAPI.RateLimited(err); limited {
 					return err
 				}
-				if firstErr == nil {
-					firstErr = fmt.Errorf("%s: %w", repo, err)
+				if repoErr == nil {
+					repoErr = err
 				}
 				continue
 			}
@@ -169,13 +183,16 @@ func (e *Engine) pollQueue(ctx context.Context) error {
 					if limited, _ := e.queueAPI.RateLimited(err); limited {
 						return err
 					}
+					if repoErr == nil {
+						repoErr = err
+					}
 					continue
 				}
 				for _, j := range js.Jobs {
 					if (j.Status != "queued" && j.Status != "waiting" && j.Status != "pending") || !labelsMatch(j.Labels, labels) {
 						continue
 					}
-					jobs = append(jobs, QueuedJob{
+					repoJobs = append(repoJobs, QueuedJob{
 						Repo: repo, Workflow: r.Name, RunID: runID, RunNumber: r.RunNumber,
 						JobID: strconv.FormatInt(j.ID, 10), Name: j.Name, Branch: r.HeadBranch,
 						Event: r.Event, Actor: r.Actor.Login, HTMLURL: j.HTMLURL,
@@ -184,7 +201,23 @@ func (e *Engine) pollQueue(ctx context.Context) error {
 				}
 			}
 		}
+		if repoErr == nil {
+			jobs = append(jobs, repoJobs...)
+			continue
+		}
+		// A failed read (often a slow answer) keeps what was last known for
+		// the repo; only repeated failures are worth a warning.
+		for _, j := range prev {
+			if j.Repo == repo {
+				jobs = append(jobs, j)
+			}
+		}
+		fails[repo] = e.queueFails[repo] + 1
+		if fails[repo] >= queueWarnAfter && firstErr == nil {
+			firstErr = fmt.Errorf("%s: %w", repo, repoErr)
+		}
 	}
+	e.queueFails = fails
 	e.queueAPI.Forget(func(p string) bool { return used["q:"+p] })
 	sort.SliceStable(jobs, func(a, b int) bool { return jobs[a].Queued.Before(jobs[b].Queued) })
 

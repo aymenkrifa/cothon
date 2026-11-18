@@ -58,6 +58,7 @@ type Engine struct {
 	notice     *Notice
 	org        *OrgState
 	queue      *QueueState
+	queueFails map[string]int // repo -> consecutive failed queue polls (poll goroutine only)
 	usage      *Usage
 	usageHist  map[string]UsageSummary // job ID -> what it used (saved to usageFile)
 	usageFile  string

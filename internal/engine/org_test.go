@@ -160,3 +160,51 @@ func TestPollQueue(t *testing.T) {
 		t.Errorf("started job still queued: %+v", q.Jobs)
 	}
 }
+
+// A repo that fails to answer keeps its last known queued jobs, and only
+// repeated failures show a warning.
+func TestPollQueueTransientFailure(t *testing.T) {
+	var down atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if down.Load() {
+			w.WriteHeader(502)
+			return
+		}
+		switch {
+		case r.URL.Path == "/repos/acme/a/actions/runs" && r.URL.Query().Get("status") == "queued":
+			fmt.Fprint(w, `{"workflow_runs":[{"id":7,"name":"CI","run_number":3}]}`)
+		case r.URL.Path == "/repos/acme/a/actions/runs":
+			fmt.Fprint(w, `{"workflow_runs":[]}`)
+		case r.URL.Path == "/repos/acme/a/actions/runs/7/jobs":
+			fmt.Fprint(w, `{"jobs":[{"id":44,"name":"test","status":"queued","labels":["self-hosted"]}]}`)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer srv.Close()
+	h := newHarness(t)
+	h.write("Worker_1.log", workerLog("a", "acme/a", "", time.Now().Add(-time.Minute)))
+	h.e.refresh()
+	h.e.queueAPI = gh.NewClient(func(context.Context) (string, error) { return "tok", nil })
+	h.e.queueAPI.BaseURL = srv.URL
+	if err := h.e.pollQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	down.Store(true)
+	for i := 1; i <= queueWarnAfter; i++ {
+		err := h.e.pollQueue(context.Background())
+		h.e.mu.Lock()
+		q := h.e.queue
+		h.e.mu.Unlock()
+		if len(q.Jobs) != 1 || q.Jobs[0].JobID != "44" {
+			t.Fatalf("poll %d: last known job dropped: %+v", i, q.Jobs)
+		}
+		if warn := i >= queueWarnAfter; (q.Warning != "") != warn || (err != nil) != warn {
+			t.Fatalf("poll %d: warning = %q, err = %v", i, q.Warning, err)
+		}
+	}
+	down.Store(false)
+	if err := h.e.pollQueue(context.Background()); err != nil || h.e.queue.Warning != "" {
+		t.Fatalf("after recovery: err = %v, warning = %q", err, h.e.queue.Warning)
+	}
+}
