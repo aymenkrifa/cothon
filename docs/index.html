@@ -2,211 +2,383 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>cothon — a dashboard for your self-hosted github actions runner</title>
-<meta name="description" content="watch every job your self-hosted github actions runner executes, across repos: a web ui, a tui, the queue, cpu and memory, and runner control. built in go, mit-licensed.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cothon: a dashboard for your self-hosted GitHub Actions runner</title>
+<meta name="description" content="A dashboard for your self-hosted GitHub Actions runner.">
+<meta name="theme-color" content="#5E1046">
+<meta property="og:title" content="cothon: a dashboard for your self-hosted GitHub Actions runner">
+<meta property="og:description" content="A dashboard for your self-hosted GitHub Actions runner: every job across repos, live CPU and memory, the queue, rerun and cancel.">
+<meta property="og:image" content="https://cothon.aymenkrifa.com/assets/cothon-social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" type="image/svg+xml" href="assets/cothon-icon.svg">
 <link rel="apple-touch-icon" href="assets/cothon-icon-180.png">
 <link rel="manifest" href="site.webmanifest">
-<meta name="theme-color" content="#0B0E16">
-<meta property="og:title" content="cothon">
-<meta property="og:description" content="a dashboard for your self-hosted github actions runner">
-<meta property="og:image" content="https://cothon.aymenkrifa.com/assets/cothon-social-preview.png">
+<link rel="canonical" href="https://cothon.aymenkrifa.com/">
 <meta property="og:url" content="https://cothon.aymenkrifa.com/">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Phoenician&display=swap" rel="stylesheet">
+<script>
+  try { var t = localStorage.getItem('cothon-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <style>
-  /* night harbour: dark is the default. the accent is tyrian purple, the dye
-     carthage and phoenicia were famous for, lifted to read on the dark sea. */
+  /* Direction C, editorial: big type, a full-bleed Tyrian block. Carthage shows up in the
+     drawing (the cothon's plan), the mosaic wave bands, Tyrian purple and the Punic name. */
   :root{
-    --bg:#0B0E16; --panel:#0F1320; --ink:#E9E4F2;
-    --purple:#D46FB8; --green:#4ADE80; --red:#FF6B6B; --amber:#F2B94B; --ash:#8A8FA3;
-    --line:rgba(138,143,163,.36); --glow:rgba(212,111,184,.15);
-    --mono:'JetBrains Mono',ui-monospace,monospace;
-    --sans:'IBM Plex Sans',system-ui,sans-serif;
+    --bg:#F6F1EA; --bg2:#EDE6DC; --card:#FFFCF7; --ink:#1D1418; --ink2:#5A4F55; --ink3:#8C8086; --line:#DDD3C7;
+    --ty:#5E1046; --ty-2:#7A1A5C; --ty-ink:#FBEFF6; --ty-dim:#D7A9C7; --pop:#FF8A5B; --accent:#7A1A5C;
+    --code:#1D1418; --code-ink:#F4ECF1; --code-dim:#9C8B95;
+    --display:'Bricolage Grotesque',system-ui,sans-serif;
+    --sans:'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+    --punic:'Noto Sans Phoenician',serif;
+    color-scheme:light;
   }
-  :root[data-theme=light]{
-    --bg:#F3F0F7; --panel:#FFFFFF; --ink:#16131D;
-    --purple:#8E1F6B; --green:#15803D; --red:#C62F2F; --amber:#9A6700; --ash:#5E6070;
-    --line:rgba(94,96,112,.32); --glow:rgba(142,31,107,.08);
-  }
-  @media (prefers-color-scheme: light){
-    :root:not([data-theme=dark]){
-      --bg:#F3F0F7; --panel:#FFFFFF; --ink:#16131D;
-      --purple:#8E1F6B; --green:#15803D; --red:#C62F2F; --amber:#9A6700; --ash:#5E6070;
-      --line:rgba(94,96,112,.32); --glow:rgba(142,31,107,.08);
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme=light]){
+      --bg:#120D10; --bg2:#1A1317; --card:#1E161B; --ink:#F3ECEF; --ink2:#B9AAB2; --ink3:#86767F; --line:#33272E;
+      --ty:#3D0A2E; --ty-2:#5A1245; --ty-ink:#FBEFF6; --ty-dim:#C995B8; --pop:#FF9A6E; --accent:#FF9A6E;
+      --code:#0B0709; --code-ink:#F4ECF1; --code-dim:#8E7D87; color-scheme:dark;
     }
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--ink);font-family:var(--mono);
-       background-image:radial-gradient(ellipse 1000px 520px at 50% -70px,var(--glow) 0%,transparent 72%);
-       background-repeat:no-repeat;font-size:16px;line-height:1.7;padding:24px 20px 28px;
-       -webkit-font-smoothing:antialiased}
-  .page{max-width:860px;margin:0 auto}
-  a{color:var(--purple)}
-
-  .masthead{display:flex;justify-content:space-between;align-items:center;gap:16px;
-       font-size:12.5px;letter-spacing:.04em;color:var(--ash);border-bottom:1px solid var(--line);padding-bottom:9px}
-  .masthead a{color:var(--ash);text-decoration:none}
-  .masthead a:hover{color:var(--purple)}
-  .sky-toggle{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:var(--ash);background:none;
-       border:none;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:7px;line-height:1}
-  .sky-toggle:hover{color:var(--purple)}
-
-  .hero{text-align:center;padding:40px 0 22px}
-  .hero img{height:72px;width:auto;max-width:86%}
-  .hero p{color:var(--ash);font-size:14.5px;margin-top:14px}
-  .hero .story{font-family:var(--sans);font-size:13.5px;max-width:560px;margin:8px auto 0;opacity:.85;line-height:1.55}
-  .logo-light,.shot-light{display:none}
-  :root[data-theme=light] .logo-light,:root[data-theme=light] .shot-light{display:inline}
-  :root[data-theme=light] .logo-dark,:root[data-theme=light] .shot-dark{display:none}
-  @media (prefers-color-scheme: light){
-    :root:not([data-theme=dark]) .logo-light,:root:not([data-theme=dark]) .shot-light{display:inline}
-    :root:not([data-theme=dark]) .logo-dark,:root:not([data-theme=dark]) .shot-dark{display:none}
+  :root[data-theme=dark]{
+    --bg:#120D10; --bg2:#1A1317; --card:#1E161B; --ink:#F3ECEF; --ink2:#B9AAB2; --ink3:#86767F; --line:#33272E;
+    --ty:#3D0A2E; --ty-2:#5A1245; --ty-ink:#FBEFF6; --ty-dim:#C995B8; --pop:#FF9A6E; --accent:#FF9A6E;
+    --code:#0B0709; --code-ink:#F4ECF1; --code-dim:#8E7D87; color-scheme:dark;
   }
+  .shot-dark{display:none}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme=light]) .shot-light{display:none} :root:not([data-theme=light]) .shot-dark{display:block} }
+  :root[data-theme=dark] .shot-light{display:none} :root[data-theme=dark] .shot-dark{display:block}
 
-  .why{display:flex;flex-direction:column;gap:6px;width:fit-content;max-width:100%;margin:6px auto 0;
-       font-size:13.5px;line-height:1.45;color:var(--ash)}
-  .why span{position:relative;padding-left:1.15em}
-  .why span::before{content:'·';position:absolute;left:0;color:var(--purple);font-weight:700}
-  .why b{color:var(--ink);font-weight:500}
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  a{color:inherit}
+  img{max-width:100%;height:auto;display:block}
+  code,pre{font-family:var(--mono)}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 32px}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--pop);outline-offset:3px;border-radius:6px}
 
-  /* panel grammar: a thin border with the title notched into the top edge */
-  .panel{position:relative;border:1px solid var(--line);background:var(--panel);margin-top:44px;padding:26px 24px 22px}
-  .panel > .title{position:absolute;top:0;left:18px;transform:translateY(-50%);background:var(--bg);padding:0 10px;
-       font-size:12.5px;letter-spacing:.06em;color:var(--ash)}
-  .panel > .title b{color:var(--purple);font-weight:700}
-  .note{font-family:var(--sans);font-size:14px;color:var(--ash);margin-top:14px;line-height:1.6;opacity:.9}
-  .note code,.cmds code{font-family:var(--mono);font-size:.9em;color:var(--ink)}
+  /* hero */
+  .hero{position:relative;background:var(--ty);color:var(--ty-ink);display:flow-root}
+  .plan-clip{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+  .plan{position:absolute;right:-250px;top:-250px;width:860px;height:860px;color:var(--ty-dim);opacity:.3}
+  .bar{position:relative;display:flex;align-items:center;gap:24px;height:76px}
+  .logo{display:flex;align-items:center;gap:10px;font:800 22px/1 var(--display);letter-spacing:-.02em;text-decoration:none}
+  .logo svg{width:26px;height:26px}
+  .bar nav{margin-left:auto;display:flex;gap:26px;font-size:15px}
+  .bar nav a{text-decoration:none;opacity:.8}
+  .bar nav a:hover{opacity:1}
 
-  .cmd-wrap{display:flex;align-items:center;gap:12px}
-  .cmd{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-size:14px;background:var(--bg);
-       border:1px solid var(--line);border-radius:2px;padding:10px 14px}
-  .prompt{color:var(--ash)}
-  .copy{font-family:var(--mono);font-size:12.5px;color:var(--ash);background:none;border:none;cursor:pointer}
-  .copy:hover{color:var(--purple)}
+  /* theme toggle: one round button showing what it switches to */
+  .tbtn{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;cursor:pointer}
+  .tbtn:hover{border-color:rgba(255,255,255,.5)}
+  .tbtn svg{width:17px;height:17px}
+  .tbtn .sun{display:none}
+  :root[data-theme=dark] .tbtn .sun{display:block} :root[data-theme=dark] .tbtn .moon{display:none}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme=light]) .tbtn .sun{display:block} :root:not([data-theme=light]) .tbtn .moon{display:none} }
 
-  .shot{display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;line-height:0}
-  .shot img{width:100%;height:auto}
+  .hero-body{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:32px 48px;align-items:start;padding:64px 0 64px}
+  .hero-body .head{grid-column:1/-1}
+  .hero-body .lead{font-size:19px;line-height:1.6;margin:0;opacity:.9;max-width:30em}
+  .tag{font:600 13px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--ty-dim);margin:0 0 20px}
+  h1{font:700 clamp(32px,4.2vw,54px)/1.08 var(--display);letter-spacing:-.03em;margin:0;max-width:16em}
+  h1 .o{color:var(--pop)}
+  .install{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:6px 6px 6px 16px}
+  .install code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-size:13.5px;padding:9px 0;scrollbar-width:none}
+  .install code::-webkit-scrollbar{display:none}
+  .install .p{opacity:.5;margin-right:8px;user-select:none}
+  .copy{flex:none;height:36px;padding:0 14px;border:0;border-radius:10px;background:var(--pop);color:#1D1418;font:600 13.5px var(--sans);cursor:pointer}
+  .copy:hover{filter:brightness(1.06)}
+  .after{margin:14px 0 0;font-size:14.5px;opacity:.8}
+  .after code{font-size:13.5px}
+  .gh{text-decoration:none;border-bottom:1px solid rgba(255,255,255,.3)}
+  .gh:hover{border-color:var(--pop)}
 
-  .tui{font-size:12.5px;line-height:1.55;overflow-x:auto;white-space:pre;background:var(--bg);
-       border:1px solid var(--line);border-radius:2px;padding:12px 14px}
-  .tui .hdr{color:var(--ink)} .tui .tabs{color:var(--purple)}
-  .tui .cardbox{display:block;color:var(--amber);border:1px solid var(--amber);border-radius:6px;padding:4px 10px;margin:6px 0 8px}
-  .tui .dim{color:var(--ash)} .tui .repo{font-weight:700}
-  .tui .gr{color:var(--green)} .tui .rd{color:var(--red)} .tui .am{color:var(--amber)} .tui .pu{color:var(--purple)}
+  /* the screenshot sits half in the hero, half below it */
+  .stage{position:relative;margin-bottom:-220px}
+  .stage .shot{display:block;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.16);
+               box-shadow:0 30px 80px -20px rgba(29,20,24,.55);background:#0B0E16;
+               -webkit-mask-image:linear-gradient(#000 78%,transparent);mask-image:linear-gradient(#000 78%,transparent)}
+  .hero + main{padding-top:220px}
 
+  /* mosaic wave band, as on Carthaginian floors */
+  .band{display:block;width:100%;height:18px;color:var(--accent);opacity:.55}
 
-  .cmds{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;font-size:13.5px}
-  .cmds span{font-family:var(--sans);color:var(--ash)}
+  /* intro statement */
+  .statement{padding-top:96px}
+  .statement p{font:500 clamp(26px,3.2vw,38px)/1.28 var(--display);letter-spacing:-.02em;margin:0;max-width:24em}
+  .statement p span{color:var(--ink3)}
+  .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:32px;margin-top:64px;padding-top:36px;position:relative}
+  .stats::before{content:'';position:absolute;inset:0 0 auto 0}
+  .stats b{display:block;font:800 clamp(34px,3.8vw,50px)/1 var(--display);letter-spacing:-.03em}
+  .stats span{display:block;margin-top:12px;color:var(--ink2);font-size:16px;line-height:1.45;max-width:14em}
 
-  footer{margin-top:40px;text-align:center;font-size:12.5px;color:var(--ash);letter-spacing:.02em}
-  footer a{color:var(--ash)}
-  footer a:hover{color:var(--purple)}
-  @media (max-width:600px){ .cmds{grid-template-columns:1fr} .cmds span{margin-bottom:8px} }
+  .sec{padding:128px 0 0}
+  .label{display:flex;align-items:baseline;gap:16px;margin-bottom:48px}
+  .label .n{font:700 15px var(--mono);color:var(--accent)}
+  h2{font:700 clamp(28px,3.4vw,42px)/1.05 var(--display);letter-spacing:-.04em;margin:0}
+
+  .feats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px 56px}
+  .feat{border-top:1px solid var(--line);padding:24px 0 16px}
+  .feat h3{font:700 21px/1.25 var(--display);letter-spacing:-.015em;margin:0 0 10px}
+  .feat p{margin:0;color:var(--ink2);font-size:16.5px;line-height:1.65}
+
+  /* quick start */
+  .qs{display:grid;gap:20px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:32px 36px;display:grid;grid-template-columns:80px minmax(0,1fr) minmax(0,1.45fr);gap:12px 32px;align-items:center;min-width:0}
+  .step>div{min-width:0}
+  .step .k{font:800 56px/1 var(--display);color:var(--accent);letter-spacing:-.04em;margin:0}
+  .step h3{font:700 22px var(--display);margin:0 0 8px;letter-spacing:-.015em}
+  .step p{margin:0;color:var(--ink2);font-size:16.5px;line-height:1.6}
+  .step pre{margin:0;background:var(--code);color:var(--code-ink);border-radius:12px;padding:16px 18px;font-size:13.5px;line-height:1.8;overflow-x:auto}
+  .step pre .c{color:var(--code-dim)}
+  .step pre .p{color:var(--pop);user-select:none}
+
+  /* requirements */
+  .req{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:56px;align-items:start}
+  .req ul{list-style:none;margin:0;padding:0}
+  .req li{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:20px;padding:20px 0;border-top:1px solid var(--line)}
+  .req li:last-child{border-bottom:1px solid var(--line)}
+  .req li b{font:700 18px var(--display);letter-spacing:-.01em}
+  .req li span{color:var(--ink2)}
+  .req code{font-size:14px}
+  .req .aside{color:var(--ink2);font-size:17px;margin:20px 0 0;max-width:26em}
+
+  /* footer: the wordmark and Carthage's own name for itself */
+  footer{margin-top:136px;background:var(--ty);color:var(--ty-ink);overflow:hidden}
+  footer .band{color:var(--pop);opacity:.7;margin-top:28px}
+  .foot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px 48px;align-items:end;padding:40px 0 32px}
+  .foot .wordmark{font:800 clamp(72px,15vw,200px)/.8 var(--display);letter-spacing:-.06em;margin:0;opacity:.95}
+  .punic{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px;margin:26px 0 0}
+  .punic .ph{font:28px/1 var(--punic);letter-spacing:.08em;color:var(--pop)}
+  .punic small{font-size:14px;opacity:.7}
+  .foot p.story{margin:12px 0 0;max-width:36em;opacity:.75;font-size:15.5px}
+  .foot nav{display:flex;flex-direction:column;gap:8px;font-size:16px;text-align:right}
+  .foot nav a{text-decoration:none;opacity:.85}
+  .foot nav a:hover{opacity:1;color:var(--pop)}
+  .fine{border-top:1px solid rgba(255,255,255,.14);padding:16px 0 22px;font-size:13.5px;opacity:.65;display:flex;flex-wrap:wrap;gap:6px 24px;justify-content:space-between}
+
+  @media (max-width:960px){
+    .hero-body{grid-template-columns:minmax(0,1fr);padding:44px 0 48px}
+    .feats{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 40px}
+    .step{grid-template-columns:48px minmax(0,1fr);gap:16px 18px;padding:26px}
+    .step .k{font-size:46px}
+    .step pre{grid-column:1/-1}
+    .req{grid-template-columns:minmax(0,1fr);gap:16px}
+    .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:36px 24px}
+    .sec{padding-top:104px}
+  }
+  @media (max-width:620px){
+    body{font-size:16px}
+    .wrap{padding:0 16px}
+    .bar nav{display:none}
+    .tbtn{margin-left:auto}
+    .plan{width:560px;height:560px;right:-230px;top:-140px}
+    .hero-body{padding:32px 0 40px}
+    .stage{margin-bottom:-90px} .hero + main{padding-top:90px}
+    .stage .shot{border-radius:10px}
+    .stage .shot img{width:175%;max-width:none}
+    .statement{padding-top:64px}
+    .stats{margin-top:44px;padding-top:28px}
+    .sec{padding-top:88px}
+    .label{margin-bottom:32px}
+    .feats{grid-template-columns:minmax(0,1fr);gap:8px}
+    .step{padding:22px 20px}
+    .step pre{font-size:12px;padding:12px 14px}
+    .req li{grid-template-columns:minmax(0,1fr);gap:4px}
+    .foot{grid-template-columns:minmax(0,1fr)}
+    .foot nav{flex-direction:row;flex-wrap:wrap;gap:8px 18px;text-align:left}
+    footer{margin-top:96px}
+  }
 </style>
 </head>
 <body>
-<div class="page">
-  <div class="masthead">
-    <span><a href="https://github.com/aymenkrifa/cothon" target="_blank" rel="noopener noreferrer">github</a> · mit</span>
-    <button class="sky-toggle" id="sky-toggle" aria-label="toggle color scheme"></button>
-  </div>
 
-  <div class="hero">
-    <img class="logo-dark" src="assets/cothon-logo-dark.svg" alt="cothon" width="443" height="102">
-    <img class="logo-light" src="assets/cothon-logo-light.svg" alt="cothon" width="443" height="102">
-    <p>a dashboard for your self-hosted github actions runner</p>
-    <p class="story">carthage kept its fleet in the cothon, a ring harbour watched from the admiral's tower at its centre. this is that tower for your runner.</p>
-  </div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- running-wave scroll, the border of many Punic mosaics -->
+    <pattern id="wave" width="36" height="18" patternUnits="userSpaceOnUse">
+      <path d="M0 14 H4 C10 14 12 10 12 7 C12 3.5 9.5 2 7.5 2 C5 2 4 4 4 5.5 C4 7.5 5.5 8.5 7 8.5 M12 7 C12 11 15 14 22 14 H36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" transform="translate(4 0)"/>
+    </pattern>
+  </defs>
+</svg>
 
-  <div class="why">
-    <span>reads the runner's own logs — <b>no admin rights</b>, works offline</span>
-    <span>every repo's jobs in <b>one live view</b>, plus what's <b>queued</b></span>
-    <span>cpu &amp; memory per job, <b>rerun &amp; cancel</b>, runner start/stop</span>
+<div class="hero">
+  <div class="plan-clip">
+    <!-- the cothon seen from above: ship sheds around the ring, the island, the admiral's tower, the channel out -->
+    <svg class="plan" viewBox="0 0 900 900" fill="none" aria-hidden="true">
+      <g stroke="currentColor">
+        <circle cx="450" cy="450" r="390" stroke-width="1.5"/>
+        <circle cx="450" cy="450" r="352" stroke-width="34" stroke-dasharray="3 15.4" opacity=".7"/>
+        <circle cx="450" cy="450" r="300" stroke-width="1.5"/>
+        <circle cx="450" cy="450" r="140" stroke-width="1.5"/>
+        <circle cx="450" cy="450" r="118" stroke-width="22" stroke-dasharray="3 11.8" opacity=".7"/>
+        <circle cx="450" cy="450" r="62" stroke-width="1.5"/>
+        <path d="M180 732 L95 818 M210 762 L125 848" stroke-width="1.5"/>
+      </g>
+      <rect x="436" y="436" width="28" height="28" fill="currentColor"/>
+    </svg>
   </div>
-
-  <div class="panel">
-    <div class="title"><b>01</b> · install</div>
-    <div class="cmd-wrap">
-      <div class="cmd"><span class="prompt">~$</span> <span id="install-cmd">go install github.com/aymenkrifa/cothon/cmd/cothon@latest</span></div>
-      <button class="copy" id="copy-btn" aria-label="copy install command">[copy]</button>
+  <div class="wrap">
+    <div class="bar">
+      <a class="logo" href="#">
+        <svg viewBox="0 0 26 26" fill="none" aria-hidden="true"><circle cx="13" cy="13" r="10.5" stroke="currentColor" stroke-width="2.6"/><circle cx="13" cy="13" r="4" fill="#FF8A5B"/></svg>
+        cothon
+      </a>
+      <nav>
+        <a href="#what">What it does</a>
+        <a href="#start">Start</a>
+        <a href="#needs">Requirements</a>
+        <a href="https://github.com/aymenkrifa/cothon">GitHub</a>
+      </nav>
+      <button class="tbtn" id="theme" type="button" aria-label="Toggle theme">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2 12h2.4M19.6 12H22M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7"/></svg>
+      </button>
     </div>
-    <p class="note">linux, go 1.24+. the <a href="https://cli.github.com" target="_blank" rel="noopener noreferrer">github cli</a> (logged in) is needed for rerun, cancel and the queue — watching works without it. update any time with <code>cothon update</code>.</p>
-  </div>
 
-  <div class="panel">
-    <div class="title"><b>02</b> · the web ui</div>
-    <a class="shot" href="assets/cothon-web-dark.png" target="_blank" rel="noopener">
-      <img class="shot-dark" src="assets/cothon-web-dark.png" alt="cothon web ui: the runner, the running job with live cpu and memory, the queue, and jobs grouped by repo and run" width="1180" height="800" loading="lazy">
-      <img class="shot-light" src="assets/cothon-web-light.png" alt="cothon web ui in light mode" width="1180" height="800" loading="lazy">
-    </a>
-    <p class="note"><code>cothon web</code> opens it in your browser and gives your prompt back; the server stops on its own a minute after you close the tab. filters live in the url, so views can be bookmarked.</p>
-  </div>
+    <div class="hero-body">
+      <div class="head">
+        <p class="tag">Open source · Go · MIT</p>
+        <h1>A dashboard for your self-hosted GitHub Actions runner<span class="o">.</span></h1>
+      </div>
+      <p class="lead">cothon shows every job your runner picks up, across all your repos: live CPU and memory, the queue, rerun and cancel, and start or stop for the runner itself.</p>
+      <div>
+        <div class="install">
+          <code><span class="p">$</span>go install github.com/aymenkrifa/cothon/cmd/cothon@latest</code>
+          <button class="copy" type="button" data-copy="go install github.com/aymenkrifa/cothon/cmd/cothon@latest">Copy</button>
+        </div>
+        <p class="after">Then <code>cothon web</code>. Linux and macOS, MIT · <a class="gh" href="https://github.com/aymenkrifa/cothon">Source on GitHub</a></p>
+      </div>
+    </div>
 
-  <div class="panel">
-    <div class="title"><b>03</b> · the tui</div>
-<div class="tui" role="img" aria-label="cothon tui: the running job card and jobs grouped by repo and run"><span class="hdr">cothon · aymen-laptop  <span class="am">●</span> busy  pid 4120  <span class="pu">2 queued</span>                          server 127.0.0.1:7777</span>
-<span class="cardbox"><span class="am">▶</span> test  4m00s   <span class="am">CPU 245%</span> · 1.3G · peak 1.7G · 37 procs
-aymenkrifa/cothon · CI #66
-⎇ main  e9b5cd0  push by aymenkrifa</span><span class="tabs"> Jobs · grouped (6)   Queue (2) </span>
-<span class="dim">  REPO · RUN · JOB    ←/→ fold · v list view</span>
-<b class="repo">  <span class="dim">▾</span> aymenkrifa/cothon  <span class="am">●</span> 1 <span class="gr">✓ 2</span>                                                            6m ago</b>
-<span class="am">●</span>    <span class="dim">▸</span> CI #66  ⎇ main  <span class="am">●</span> 1 <span class="gr">✓ 1</span>                                                     6m ago  6m00s
-<span class="gr">✓ </span>   <span class="dim">▸</span> CI #65  ⎇ main  <span class="gr">✓ 1</span>                                                          54m ago  39s
-<b class="repo">  <span class="dim">▾</span> aymenkrifa/reaper  <span class="gr">✓ 2</span> <span class="rd">✗ 1</span>                                                           33m ago</b>
-     <span class="dim">▾</span> CI #425  ⎇ main  <span class="gr">✓ 1</span> <span class="rd">✗ 1</span>                                                   33m ago  4m43s
-<span class="rd">✗ </span>        build (aarch64)                                                                  2m10s
-<span class="gr">✓ </span>        build (x86_64)                                                                   1m43s
-<span class="gr">✓ </span>   <span class="dim">▸</span> Release #18  ⎇ main  <span class="gr">✓ 1</span>                                                    1h ago  1m34s
-<span class="dim">↑↓ move  ←→ fold  enter open/fold  v view  r rerun  f rerun failed  c cancel run  / filter  F s…</span></div>
-    <p class="note"><code>cothon tui</code> — the same views in your terminal. <code>←/→</code> fold, <code>v</code> switches to a flat list, <code>tab</code> shows the queue.</p>
-  </div>
-
-  <div class="panel">
-    <div class="title"><b>04</b> · the runner</div>
-    <div class="cmds">
-      <code>cothon runner status</code><span>running? busy? cpu and memory</span>
-      <code>cothon runner start</code><span>runs run.sh detached — closing the terminal doesn't stop it</span>
-      <code>cothon runner stop</code><span>waits for the current job (<code>--force</code> cancels it)</span>
-      <code>cothon runner logs -f</code><span>what the runner prints, however it was started</span>
-      <code>cothon runner enable</code><span>start at login and restart on crash (systemd user service)</span>
+    <div class="stage">
+      <a class="shot" href="assets/cothon-web-dark.png" target="_blank" rel="noopener" aria-label="Open the screenshot full size">
+        <img class="shot-light" src="assets/cothon-web-light.png" width="1180" height="800" alt="The cothon web UI: runner card, the running job with live CPU and memory, the queue, and jobs grouped by repository">
+        <img class="shot-dark" src="assets/cothon-web-dark.png" width="1180" height="800" alt="The cothon web UI: runner card, the running job with live CPU and memory, the queue, and jobs grouped by repository">
+      </a>
     </div>
   </div>
-
-  <footer>made by <a href="https://aymenkrifa.com" target="_blank" rel="noopener noreferrer">aymen krifa</a>, named after carthage's harbour and built with go.</footer>
 </div>
-<script>
-(function(){
-  var btn = document.getElementById('sky-toggle');
-  var mq = matchMedia('(prefers-color-scheme: dark)');
-  try { var saved = localStorage.getItem('cothon-theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (e) {}
-  function effective(){ return document.documentElement.dataset.theme || (mq.matches ? 'dark' : 'light'); }
-  var SUN = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 1.8v2.4M12 19.8v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M1.8 12h2.4M19.8 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>';
-  var MOON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 13.1A8.6 8.6 0 1 1 10.9 3.2a6.7 6.7 0 0 0 9.9 9.9z"/></svg>';
-  function label(){
-    var dark = effective() === 'dark';
-    btn.innerHTML = (dark ? SUN : MOON) + '<span>' + (dark ? 'light' : 'dark') + '</span>';
-    btn.setAttribute('aria-label', dark ? 'switch to light' : 'switch to dark');
-  }
-  btn.addEventListener('click', function(){
-    var next = effective() === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    try { localStorage.setItem('cothon-theme', next); } catch (e) {}
-    label();
-  });
-  mq.addEventListener('change', label);
-  label();
 
-  var copy = document.getElementById('copy-btn');
-  copy.addEventListener('click', function(){
-    navigator.clipboard.writeText(document.getElementById('install-cmd').textContent).then(function(){
-      copy.textContent = '[copied]'; setTimeout(function(){ copy.textContent = '[copy]'; }, 1500);
+<main>
+  <div class="wrap statement">
+    <p>cothon reads the runner's own logs. <span>No admin rights, no webhooks, nothing to host: a job shows up the moment it starts, even offline.</span></p>
+    <svg class="band" style="margin-top:64px" aria-hidden="true"><rect width="100%" height="18" fill="url(#wave)"/></svg>
+    <div class="stats" style="margin-top:0">
+      <div><b>0</b><span>admin rights needed on GitHub</span></div>
+      <div><b>~20 MB</b><span>of memory for the server</span></div>
+      <div><b>0.03%</b><span>of one core while idle</span></div>
+      <div><b>1</b><span>binary, nothing else to run</span></div>
+    </div>
+  </div>
+
+  <section class="sec" id="what">
+    <div class="wrap">
+      <div class="label"><span class="n">01</span><h2>What it does</h2></div>
+      <div class="feats">
+        <div class="feat"><h3>Every job, every repo</h3><p>Grouped by repository and run, or as one list. Filters live in the URL, so any view is a bookmark.</p></div>
+        <div class="feat"><h3>Live CPU and memory</h3><p>The running job's CPU, memory and processes as they happen. Finished jobs keep their average and peak.</p></div>
+        <div class="feat"><h3>The queue</h3><p>Jobs waiting for this runner, asked from GitHub for the repos it worked on recently.</p></div>
+        <div class="feat"><h3>Rerun and cancel</h3><p>Rerun a job, rerun the failed ones, or cancel a run without leaving the list.</p></div>
+        <div class="feat"><h3>Runner control</h3><p>Start it detached, stop or restart it after the current job, follow its logs, start it at login.</p></div>
+        <div class="feat"><h3>Private by default</h3><p>Localhost only, behind one-time sign-in links. Only the queue and your actions talk to GitHub.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="start">
+    <div class="wrap">
+      <div class="label"><span class="n">02</span><h2>Start in three commands</h2></div>
+      <div class="qs">
+        <div class="step">
+          <div class="k">1</div>
+          <div><h3>Install</h3>
+          <p>One Go command. <code>cothon update</code> keeps it current.</p></div>
+<pre><span class="p">$ </span>go install github.com/aymenkrifa/cothon/cmd/cothon@latest</pre>
+        </div>
+        <div class="step">
+          <div class="k">2</div>
+          <div><h3>Open it</h3>
+          <p>The server starts in the background and stops after the last tab closes.</p></div>
+<pre><span class="p">$ </span>cothon web</pre>
+        </div>
+        <div class="step">
+          <div class="k">3</div>
+          <div><h3>Manage the runner</h3>
+          <p>No more <code>run.sh</code> in a terminal you can't close. Stop waits for the current job.</p></div>
+<pre><span class="p">$ </span>cothon runner start   <span class="c"># detached</span>
+<span class="p">$ </span>cothon runner logs -f
+<span class="p">$ </span>cothon runner stop    <span class="c"># after the job</span>
+<span class="p">$ </span>cothon runner enable  <span class="c"># at login</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="needs">
+    <div class="wrap req">
+      <div>
+        <div class="label" style="margin-bottom:0"><span class="n">03</span><h2>What you need</h2></div>
+        <p class="aside">Watching jobs needs only the runner's logs. The GitHub CLI is for the actions that talk to GitHub.</p>
+      </div>
+      <ul>
+        <li><b>Linux or macOS</b><span>The machine your runner runs on.</span></li>
+        <li><b>A self-hosted runner</b><span>Installed from GitHub's tarball, in <code>~/actions-runner</code> or wherever <code>runner_dir</code> points.</span></li>
+        <li><b>Go 1.24+</b><span>To install and update cothon.</span></li>
+        <li><b>GitHub CLI</b><span>Optional. Logged in, for rerun, cancel and the queue.</span></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <svg class="band" aria-hidden="true"><rect width="100%" height="18" fill="url(#wave)"/></svg>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <p class="wordmark">cothon</p>
+        <p class="punic"><span class="ph" lang="phn">𐤒𐤓𐤕𐤇𐤃𐤔𐤕</span><small>Qart-ḥadasht, “new city”: Carthage</small></p>
+        <p class="story">Carthage kept its war fleet in the cothon, a round harbour watched from a tower on the island at its centre. This is that tower for your runner.</p>
+      </div>
+      <nav>
+        <a href="https://github.com/aymenkrifa/cothon">GitHub</a>
+        <a href="https://github.com/aymenkrifa/cothon/issues">Issues</a>
+        <a href="llms.txt">llms.txt</a>
+      </nav>
+    </div>
+    <div class="fine"><span>MIT License</span><span>Made by <a href="https://aymenkrifa.com">Aymen Krifa</a></span></div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement, mq = matchMedia('(prefers-color-scheme: dark)');
+    var tb = document.getElementById('theme');
+    function current() { return root.dataset.theme || (mq.matches ? 'dark' : 'light'); }
+    function label() { tb.setAttribute('aria-label', current() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'); }
+    tb.addEventListener('click', function () {
+      root.dataset.theme = current() === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('cothon-theme', root.dataset.theme); } catch (e) {}
+      label();
     });
-  });
-})();
+    mq.addEventListener('change', label);
+    label();
+    function fallbackCopy(text) {
+      var t = document.createElement('textarea'); t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} t.remove();
+    }
+    document.querySelectorAll('[data-copy]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var text = b.dataset.copy;
+        var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1600); };
+        if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+        else { fallbackCopy(text); done(); }
+      });
+    });
+  })();
 </script>
 </body>
 </html>

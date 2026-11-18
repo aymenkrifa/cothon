@@ -1,11 +1,11 @@
 {
   "name": "cothon",
   "short_name": "cothon",
-  "description": "a dashboard for your self-hosted github actions runner",
+  "description": "A dashboard for your self-hosted GitHub Actions runner",
   "start_url": "/",
   "display": "browser",
-  "background_color": "#0B0E16",
-  "theme_color": "#0B0E16",
+  "background_color": "#5E1046",
+  "theme_color": "#5E1046",
   "icons": [
     { "src": "assets/cothon-icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "assets/cothon-icon-512.png", "sizes": "512x512", "type": "image/png" },
