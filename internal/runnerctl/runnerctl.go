@@ -23,14 +23,14 @@ import (
 	"github.com/aymenkrifa/cothon/internal/fleet"
 )
 
-// Unit is the transient systemd unit name used with Mode "systemd".
+// Unit is the transient systemd unit name used with Mode "systemd" (Linux).
 const Unit = "cothon-runner"
 
 var ErrAlreadyRunning = errors.New("runner listener is already running")
 
 type Controller struct {
 	RunnerDir string
-	Mode      string // "setsid" or "systemd"
+	Mode      string // "setsid" or "systemd" (Linux only)
 	// LogFile receives run.sh output in setsid mode.
 	LogFile string
 	// Find returns live processes; defaults to fleet.FindProcesses.
@@ -56,21 +56,11 @@ func (c *Controller) Start() (string, error) {
 		return "", err
 	}
 	if ServiceInstalled() {
-		if err := systemctl("start", ServiceName); err != nil {
-			return "", err
-		}
-		return "started the " + ServiceName + " systemd user service", nil
+		return startService()
 	}
 
 	if c.Mode == "systemd" {
-		// A failed previous unit with the same name would block a new one.
-		exec.Command("systemctl", "--user", "reset-failed", Unit).Run()
-		cmd := exec.Command("systemd-run", "--user", "--unit="+Unit, "--collect",
-			"--working-directory="+c.RunnerDir, "--description=GitHub Actions runner (cothon)", runSh)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return "", fmt.Errorf("systemd-run: %v: %s", err, out)
-		}
-		return "started as systemd user unit " + Unit + " (logs: journalctl --user -u " + Unit + ")", nil
+		return c.startTransientUnit(runSh)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(c.LogFile), 0o700); err != nil {
@@ -112,9 +102,9 @@ func (c *Controller) Interrupt() error {
 		return errors.New("runner listener is not running")
 	}
 	if InService(p.ListenerPID) {
-		// Through systemd, so Restart=always doesn't bring it back; the unit
-		// sends SIGINT (KillSignal) to the runner's processes.
-		return systemctl("stop", "--no-block", ServiceName)
+		// Through the service manager, so its auto-restart doesn't bring it
+		// back; it stops the runner gracefully (SIGINT to the listener).
+		return stopService()
 	}
 	return syscall.Kill(p.ListenerPID, syscall.SIGINT)
 }
@@ -134,4 +124,22 @@ func (c *Controller) WaitStopped(ctx context.Context, timeout time.Duration) boo
 		}
 	}
 	return !c.Procs().Alive()
+}
+
+// Manager describes who runs the runner right now.
+func (c *Controller) Manager() string {
+	p := c.Procs()
+	switch {
+	case !p.Alive():
+		if ServiceInstalled() {
+			return "stopped (service enabled: starts at login)"
+		}
+		return "stopped"
+	case InService(p.ListenerPID) || InService(p.SupervisorPID):
+		return serviceDescription + " (restarts if it crashes)"
+	case ServiceInstalled():
+		return "started outside the service (service enabled: takes over at next login)"
+	default:
+		return "run.sh, started manually or by cothon (no auto-restart; \"cothon runner enable\" adds it)"
+	}
 }

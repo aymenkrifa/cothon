@@ -24,11 +24,11 @@ type Config struct {
 	Notify string `toml:"notify"`
 	// GH is the GitHub CLI binary used for actions and for the API token.
 	GH string `toml:"gh"`
-	// Browser opens the web UI: "" = desktop default (xdg-open), "none" =
+	// Browser opens the web UI: "" = desktop default (xdg-open, or open on macOS), "none" =
 	// only print the link, or a command such as "firefox".
 	Browser string `toml:"browser"`
 	// RunnerStart: "setsid" (detached, inherits the daemon's environment) or
-	// "systemd" (transient `systemd-run --user` unit, survives logout of the shell).
+	// "systemd" (transient `systemd-run --user` unit, survives logout of the shell; Linux only).
 	RunnerStart string `toml:"runner_start"`
 
 	Org   OrgConfig   `toml:"org"`
@@ -194,7 +194,7 @@ browser = ""
 
 # How "runner start" launches run.sh:
 #   "setsid"  - detached process that inherits the daemon's environment
-#   "systemd" - transient "systemd-run --user" unit (logs: journalctl --user -u cothon-runner)
+#   "systemd" - transient "systemd-run --user" unit (logs: journalctl --user -u cothon-runner; Linux only)
 runner_start = "setsid"
 
 [queue]

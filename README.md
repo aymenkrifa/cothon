@@ -13,8 +13,11 @@ starts. Optionally it also polls your org for queued runs.
 
 ## Requirements
 
-* **Linux** — cothon reads `/proc` and the runner's `_diag` logs, and the
-  optional auto-start uses a systemd user service.
+* **Linux or macOS** — cothon reads the runner's `_diag` logs and finds its
+  processes (`/proc` on Linux, `ps` on macOS). The optional auto-start
+  (`runner enable`) is a systemd user service on Linux and a launchd agent
+  (`~/Library/LaunchAgents`) on macOS. macOS support is newer and less tested:
+  `--at-boot` and `runner_start = "systemd"` are Linux-only.
 * A self-hosted runner installed from GitHub's tarball (`~/actions-runner` by
   default; set `runner_dir` otherwise).
 * [Go](https://go.dev/dl/) 1.24+ to build it.
@@ -45,7 +48,7 @@ Docs: **https://cothon.aymenkrifa.com**
 | `cothon start` / `stop` / `status` | Run the server in the background until `stop`; `status` shows the server, the runner, and CPU/memory. Log: `~/.local/state/cothon/daemon.log`. |
 | `cothon link [path]` | Prints a fresh one-time sign-in link — paste it into any browser. |
 | `cothon tui` | Terminal UI. Uses the server if one runs, otherwise reads the logs itself. |
-| `cothon serve` | The server in the foreground (for systemd or debugging). |
+| `cothon serve` | The server in the foreground (for systemd/launchd or debugging). |
 | `cothon scan` | Prints recent jobs (`--json` for scripts). |
 | `cothon update` / `version` | Installs the latest version (with `go install`, into the same folder) / prints the installed one. |
 | `cothon config init` | Writes a commented config to `~/.config/cothon/config.toml`. |
@@ -60,7 +63,7 @@ Docs: **https://cothon.aymenkrifa.com**
 | `runner start` | Starts `run.sh` detached — closing the terminal doesn't stop it. |
 | `runner stop` / `restart` | Waits for the current job (`--force` cancels it instead). |
 | `runner logs [-f] [-n N]` | What the runner prints, however it was started (`-f` follows, across restarts). |
-| `runner enable [--at-boot]` | Installs a systemd user service: starts at login (or at boot with `--at-boot`) and restarts if it crashes. A runner already running keeps going; `runner restart` moves it under the service. |
+| `runner enable [--at-boot]` | Installs a systemd user service (Linux) or a launchd agent (macOS): starts at login (or at boot with `--at-boot`, Linux only) and restarts if it crashes. A runner already running keeps going; `runner restart` moves it under the service. |
 | `runner disable` | Removes that service (a running runner keeps running). |
 
 ### Links you can bookmark
@@ -139,7 +142,8 @@ file. To keep CI jobs out, run the runner as a separate user.
   to sign every browser out;
 * POSTs also need a custom header and a same-origin `Origin`/`Sec-Fetch-Site` (CSRF);
 * actions only touch runs and jobs cothon is showing; `gh` is called with argv only;
-* one daemon at a time (a `flock` in `$XDG_RUNTIME_DIR/cothon/`).
+* one daemon at a time (a `flock` in `$XDG_RUNTIME_DIR/cothon/`, or a 0700
+  `cothon-$UID` folder in the temp dir when that isn't set, e.g. on macOS).
 
 ## Runner control notes
 
@@ -149,7 +153,12 @@ file. To keep CI jobs out, run the runner as a separate user.
   listener during self-updates), and while a previous start is still coming
   up: a second listener only gets "A session for this runner already exists".
 * `runner_start = "setsid"` (default) inherits your environment;
-  `"systemd"` uses a transient `systemd-run --user` unit.
+  `"systemd"` uses a transient `systemd-run --user` unit (Linux only).
+* On macOS, a runner under the launchd agent is stopped with
+  `launchctl bootout` (launchd would restart a runner that just exits); the
+  agent sets `RUNNER_MANUALLY_TRAP_SIG=1` so run.sh turns launchd's SIGTERM
+  into the listener's graceful SIGINT. It loads again at the next login or
+  `cothon runner start`.
 
 ## License
 

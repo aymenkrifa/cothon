@@ -43,7 +43,7 @@ commands:
   start     run the server in the background until "cothon stop"
   stop      stop the background server
   status    server and runner status, with CPU and memory
-  serve     run the server in the foreground (for systemd, or to watch its logs)
+  serve     run the server in the foreground (for systemd/launchd, or to watch its logs)
   tui       terminal UI (uses the server if running, otherwise runs standalone)
   scan      print recent jobs and exit
   runner    status | start | stop | restart [--force] | logs [-f] | enable [--at-boot] | disable
@@ -663,7 +663,7 @@ func cmdRunner(args []string) error {
 	force := fs.Bool("force", false, "stop/restart even if a job is running (the job is canceled)")
 	follow := fs.Bool("f", false, "logs: keep following new output")
 	lines := fs.Int("n", 40, "logs: lines of past output to show")
-	atBoot := fs.Bool("at-boot", false, "enable: start at boot, without logging in (enables lingering)")
+	atBoot := fs.Bool("at-boot", false, "enable: start at boot, without logging in (enables lingering; Linux only)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, `usage: cothon runner <command>
   status                 is it running, who manages it, CPU and memory
@@ -672,6 +672,7 @@ func cmdRunner(args []string) error {
   restart [--force]      stop, then start again
   logs [-f] [-n N]       what the runner prints (from its diag log)
   enable [--at-boot]     start at login (or boot) and restart if it crashes
+                         (systemd user service on Linux, launchd agent on macOS)
   disable                undo enable`)
 		fs.PrintDefaults()
 	}

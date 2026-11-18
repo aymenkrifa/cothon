@@ -19,6 +19,33 @@ import (
 // ServiceName is the systemd user unit cothon installs.
 const ServiceName = "cothon-runner.service"
 
+const serviceDescription = "systemd user service " + ServiceName
+
+func startService() (string, error) {
+	if err := systemctl("start", ServiceName); err != nil {
+		return "", err
+	}
+	return "started the " + ServiceName + " systemd user service", nil
+}
+
+// stopService stops the unit without waiting; the unit sends SIGINT
+// (KillSignal) to the runner's processes, and Restart=always doesn't apply.
+func stopService() error {
+	return systemctl("stop", "--no-block", ServiceName)
+}
+
+// startTransientUnit starts run.sh as a transient systemd-run unit.
+func (c *Controller) startTransientUnit(runSh string) (string, error) {
+	// A failed previous unit with the same name would block a new one.
+	exec.Command("systemctl", "--user", "reset-failed", Unit).Run()
+	cmd := exec.Command("systemd-run", "--user", "--unit="+Unit, "--collect",
+		"--working-directory="+c.RunnerDir, "--description=GitHub Actions runner (cothon)", runSh)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("systemd-run: %v: %s", err, out)
+	}
+	return "started as systemd user unit " + Unit + " (logs: journalctl --user -u " + Unit + ")", nil
+}
+
 func unitPath() string {
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
 		return filepath.Join(d, "systemd", "user", ServiceName)
@@ -140,22 +167,4 @@ func (c *Controller) Disable() (string, error) {
 		msg += "\nit is still running; \"cothon runner stop\" stops it"
 	}
 	return msg, nil
-}
-
-// Manager describes who runs the runner right now.
-func (c *Controller) Manager() string {
-	p := c.Procs()
-	switch {
-	case !p.Alive():
-		if ServiceInstalled() {
-			return "stopped (service enabled: starts at login)"
-		}
-		return "stopped"
-	case InService(p.ListenerPID) || InService(p.SupervisorPID):
-		return "systemd user service " + ServiceName + " (restarts if it crashes)"
-	case ServiceInstalled():
-		return "started outside the service (service enabled: takes over at next login)"
-	default:
-		return "run.sh, started manually or by cothon (no auto-restart; \"cothon runner enable\" adds it)"
-	}
 }

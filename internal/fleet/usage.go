@@ -1,17 +1,9 @@
 package fleet
 
-import (
-	"bytes"
-	"os"
-	"strconv"
-	"strings"
-)
-
-// ClockTicks is USER_HZ, the unit of CPU times in /proc/<pid>/stat (100 on
-// every Linux architecture cothon targets).
+// ClockTicks is the unit of Sample.Ticks: USER_HZ on Linux (the unit of CPU
+// times in /proc/<pid>/stat, 100 on every architecture cothon targets), and
+// hundredths of a second on macOS, where ps reports CPU time as mm:ss.cc.
 const ClockTicks = 100
-
-var pageSize = uint64(os.Getpagesize())
 
 // Sample is the resource use of a set of processes at one instant.
 type Sample struct {
@@ -25,44 +17,19 @@ type Sample struct {
 
 type procStat struct {
 	ppid  int
-	ticks uint64 // utime + stime + cutime + cstime
+	ticks uint64 // own CPU time plus that of reaped children
 	rss   uint64
-}
-
-// readStat parses /proc/<pid>/stat.
-func readStat(pid int) (procStat, bool) {
-	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
-		return procStat{}, false
-	}
-	i := bytes.LastIndexByte(raw, ')') // the command name may contain spaces and ')'
-	if i < 0 {
-		return procStat{}, false
-	}
-	f := strings.Fields(string(raw[i+1:]))
-	// f[0] is field 3 (state); field n is f[n-3].
-	if len(f) < 22 {
-		return procStat{}, false
-	}
-	var st procStat
-	st.ppid, _ = strconv.Atoi(f[1])
-	for _, k := range []int{11, 12, 13, 14} { // utime, stime, cutime, cstime
-		v, _ := strconv.ParseUint(f[k], 10, 64)
-		st.ticks += v
-	}
-	pages, _ := strconv.ParseUint(f[21], 10, 64) // rss in pages
-	st.rss = pages * pageSize
-	return st, true
 }
 
 // SampleProcs measures the given processes themselves (not their children).
 func SampleProcs(pids ...int) Sample {
 	var s Sample
+	stats := procStatsOf(pids)
 	for _, pid := range pids {
 		if pid <= 0 {
 			continue
 		}
-		if st, ok := readStat(pid); ok {
+		if st, ok := stats[pid]; ok {
 			s.Ticks += st.ticks
 			s.RSS += st.rss
 			s.Procs++
@@ -78,22 +45,12 @@ func SampleTree(root int) Sample {
 	if root <= 0 {
 		return Sample{}
 	}
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
+	stats := procTable()
+	if stats == nil {
 		return Sample{}
 	}
-	stats := make(map[int]procStat, len(entries))
-	children := make(map[int][]int, len(entries))
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
-			continue
-		}
-		st, ok := readStat(pid)
-		if !ok {
-			continue
-		}
-		stats[pid] = st
+	children := make(map[int][]int, len(stats))
+	for pid, st := range stats {
 		children[st.ppid] = append(children[st.ppid], pid)
 	}
 	var s Sample

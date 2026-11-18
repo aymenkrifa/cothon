@@ -11,7 +11,11 @@ permissions:
 jobs:
   test:
     # GitHub-hosted on purpose: never run a public repo's CI on a self-hosted runner.
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
